@@ -95,12 +95,16 @@ public class MainActivity extends AppCompatActivity {
     DeviceAdapter adapter;
     int insertIndex = 1;
     int taskDevice = 0;
+    int totalFrames = 0;
     int second = 0;
     private int currentDelegate = 1;
     public long totalTime;
     public Boolean mainBusy = false;
     //private Map<String,String> DeviceMap = new HashMap<>();
     List<NDevice> devices = new ArrayList<>();
+    int motoFrame = 0;
+    int pixelFrame = 0;
+    int samsungFrame = 0;
 
     Context context;
 
@@ -189,8 +193,18 @@ public class MainActivity extends AppCompatActivity {
                                     d.sentFrameTime = System.currentTimeMillis() - d.sentFrameTime;
                                     d.frameProcessingPower = Math.round(1000 / d.sentFrameTime);
                                     d.isBusy = false;
-                                    Log.i(TAG, "Processing power for" + d.name + " " + d.endPointId + "is" + d.frameProcessingPower);
-                                    Log.i(TAG, "Sent frame time is:" + d.sentFrameTime);
+                                    Log.i("Result", "Processing power for" + d.name + " " + d.endPointId + "is" + d.frameProcessingPower);
+                                    Log.i("Result", "Sent frame time is:" + d.sentFrameTime);
+                                    if(d.name.equals("Pixel 4a")){
+                                        pixelFrame++;
+                                    }
+                                    if(d.name.equals("Samsung Tab s7 FE")){
+                                        samsungFrame++;
+                                    }
+                                    if(d.name.equals("Moto g50")){
+                                        motoFrame++;
+                                    }
+                                    Log.i("Result","moto is:"+motoFrame+ "Pixel is"+pixelFrame+ "Samsung is"+samsungFrame);
                                 }
                             }
                             schedule();
@@ -280,8 +294,43 @@ public class MainActivity extends AppCompatActivity {
 
                 }
 
+                //algo to schedule based on availibility and battery
+                public NDevice scheduleBattery() {
+                    NDevice tempDevice = new NDevice("", "", true, 0, 0, false, 0, 0, 0);
+                    for (NDevice device : devices) {
+                        if (device.isWorker && !device.isBusy) {
+                            if (tempDevice.endPointId.isEmpty()) {
+                                tempDevice = device;
+                            } else {
+                                if (tempDevice.battery < device.battery) {
+                                    tempDevice = device;
+                                }
+                            }
+                        }
+                    }
+                    if(tempDevice.name==""){
+                        tempDevice=devices.get(0);
+                    }
+                    return tempDevice;
+                }
+
+                //First-Fit Algorithm - whichever is available first is used
+                public NDevice scheduleAvailable(){
+                    NDevice tempDevice = new NDevice("", "", true, 0,0,false,0,0,0);
+                    for(NDevice device:devices){
+                        if(!device.isBusy & device.isWorker){
+                            tempDevice = device;
+                            break;
+                        }
+                    }
+                    if(tempDevice.name==""){
+                        tempDevice = devices.get(0);
+;                    }
+                    return tempDevice;
+                }
+
                 public void schedule() {
-                        NDevice bestDeviceChoice = scheduleFirstDevice();
+                       NDevice bestDeviceChoice = scheduleBattery();
 
                         if(!bestDeviceChoice.name.equals("MainDevice") && !bestDeviceChoice.endPointId.isEmpty()){
                             bestDeviceChoice.sentFrameTime = System.currentTimeMillis();
@@ -305,6 +354,19 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                 }
+                // All jobs to the fastest device - which is Main
+                public void schedule1(){
+                    NDevice bestDeviceChoice = devices.get(0);
+                    bestDeviceChoice.isBusy = true;
+                    AsyncTask.execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            if(queue.size()>1){
+                                processFilePayload(queue.remove());
+                            }
+                        }
+                    });
+                }
 
 
                 private long addPayloadFilename(String payloadFilenameMessage) {
@@ -324,7 +386,7 @@ public class MainActivity extends AppCompatActivity {
                     String filename = filePayloadFilenames.get(payloadId);
                     if (filePayload != null) {
                         ParcelFileDescriptor img = filePayload.asFile().asParcelFileDescriptor();
-                        Log.i(TAG, "file payload is not null");
+                        //Log.i(TAG, "file payload is not null");
                         FileDescriptor fd = img.getFileDescriptor();
                         Bitmap bitmap = BitmapFactory.decodeFileDescriptor(fd);
 
@@ -332,8 +394,9 @@ public class MainActivity extends AppCompatActivity {
                         Utils.bitmapToMat(bitmap, image);
                         listOfResults.clear();
                         image = signRecognition.detectionImage(image, listOfResults, displayedSignClass);
-                        Log.i(TAG,listOfResults.get(0));
-
+                        Log.i("Result",listOfResults.get(0));
+                        totalFrames++;
+                        Log.i("Result","Frames processed on main are:"+totalFrames);
                         Log.i(TAG, "Main device called Process payload file checker method for " + payloadId + "," + filename);
                         mainBusy = false;
 
@@ -371,7 +434,7 @@ public class MainActivity extends AppCompatActivity {
                                 if (deviceName.equals("Dashcam")) {
                                     devices.add(new NDevice(connectionInfo.getEndpointName(), endpointId, false, 0, 0, false, 0, 0, 0));
                                 } else {
-                                    devices.add(new NDevice(connectionInfo.getEndpointName(), endpointId, true, 0, 2, false, 0, 0, 0));
+                                    devices.add(new NDevice(connectionInfo.getEndpointName(), endpointId, true, 0, 0, false, 0, 0, 0));
                                 }
                                 insertIndex++;
                                 adapter.notifyItemInserted(insertIndex);
